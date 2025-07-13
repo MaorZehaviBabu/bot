@@ -2,16 +2,18 @@ import json
 import os
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
+from twilio.rest import Client
 
 app = Flask(__name__)
 
 FILE_NAME = "shopping_list.json"
+BASE_URL = os.environ.get("BASE_URL", "")  # הכתובת הציבורית שלך ב-Render
 
 CATEGORIES = {
     "לפני מוצרי החלב": ["יין", "תירוש", "סלומון מעושן"],
     "מוצרי חלב": ["חלב", "גבינה", "יוגורט", "שמנת", "קוטג", "גבינת", "מוצרלה"],
     "לחמים": ["לחם", "פיתות", "לחמניות", "טורטיות"],
-    "בשר ודגים": ["בשר", "עוף", "דג", "המבורגר", ],
+    "בשר ודגים": ["בשר", "עוף", "דג", "המבורגר"],
     "קפואים": ["קפוא"],
     "ירקות": ["עגבנייה", "עגבניה", "מלפפון", "גזר", "פלפל", "בצל", "פטריות",
               "חסה", "שום", "כוסברה", "כרוב", "שומר", 'תפו"א', "קולורבי"],
@@ -26,20 +28,18 @@ CATEGORIES = {
 }
 
 
-# פונקציה לטעינת רשימה מהקובץ
 def load_shopping_list():
     if os.path.exists(FILE_NAME):
         with open(FILE_NAME, "r", encoding="utf-8") as f:
             return json.load(f)
     else:
-        # אם הקובץ לא קיים - אתחל מילון ריק עם כל הקטגוריות
         return {category: [] for category in CATEGORIES.keys()}
 
 
-# פונקציה לשמירת הרשימה לקובץ
 def save_shopping_list(shopping_list):
     with open(FILE_NAME, "w", encoding="utf-8") as f:
         json.dump(shopping_list, f, ensure_ascii=False, indent=2)
+
 
 shopping_list = load_shopping_list()
 
@@ -58,7 +58,7 @@ def generate_text_file(shopping_list):
     for category, items in shopping_list.items():
         if items:
             lines.append(f"\n== {category} ==\n")
-            for i, item in enumerate(items, start=1):
+            for item in items:
                 lines.append(f"[ ] {item}")
 
     content = "\n".join(lines)
@@ -108,22 +108,21 @@ def whatsapp():
             msg.body(f"❌ לא מצאתי את '{item}' ברשימה.")
 
     elif incoming_msg == "יצא לרשימה":
-        file_path = generate_text_file(shopping_list)
-        from twilio.rest import Client
-
-        # שלח קובץ דרך WhatsApp באמצעות Twilio API
-        account_sid = 'ACace53e187e23bbda68432cba47176c1d'
-        auth_token = '5d30eab14d459b2e40a01a53fd844e70'
+        generate_text_file(shopping_list)
+        account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+        auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
         client = Client(account_sid, auth_token)
 
-        from_number = request.values.get('To')  # מספר הוואטסאפ של הבוט
-        to_number = request.values.get('From')  # מספר הלקוח
+        from_number = request.values.get('To')
+        to_number = request.values.get('From')
 
-        message = client.messages.create(
+        public_url = f"{BASE_URL}/shopping_list.txt"
+
+        client.messages.create(
             from_=from_number,
             to=to_number,
             body="📎 הנה רשימת הקניות שלך:",
-            media_url="https://4cc7d4a454bb.ngrok-free.app/shopping_list.txt"
+            media_url=public_url
         )
 
         msg.body("📤 שלחתי לך את הרשימה כקובץ.")
@@ -146,7 +145,7 @@ def whatsapp():
         msg.body("🧹 הרשימה נמחקה.")
 
     else:
-        msg.body("לא הבנתי. נסה:\n• הוסף חלב\n• רשימה\n• נקה")
+        msg.body("לא הבנתי. נסה:\n• הוסף חלב\n• הסר חלב\n• רשימה\n• נקה\n• יצא לרשימה")
 
     return str(resp)
 
