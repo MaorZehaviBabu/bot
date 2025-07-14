@@ -70,6 +70,10 @@ def generate_text_file(shopping_list):
 def categorize_item(item):
     for category, keywords in CATEGORIES.items():
         for word in keywords:
+            if word == item:
+                return category
+    
+        for word in keywords:
             if word in item:
                 return category
     return "אחר"
